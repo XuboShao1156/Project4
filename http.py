@@ -1,19 +1,17 @@
-import string
-
-from rawsocket import RawSocket
+from tcp import TcpHandler
 from urllib.parse import urlparse
 
 HTTP_PORT = 80
 
-class Requester(object):
+class HttpHandler(object):
     def __init__(self) -> None:
-        self.socket = RawSocket()
+        self.tcpHandler = TcpHandler()
 
-    def get(self, url) -> string:
+    def get(self, url) -> str:
         urlobj = urlparse(url)
 
         # connect host
-        self.socket.connect(urlobj.host, HTTP_PORT)
+        self.socket.connect(self.__dns(urlobj.hostname), HTTP_PORT)
 
         # send http request
         request = "GET {} HTTP/1.0\r\nHost: {}\r\n\r\n".format(urlobj.path, urlobj.hostname)
@@ -25,6 +23,9 @@ class Requester(object):
         # parse response for content and return
         return self.__parse(rawResp)
     
-    def __parse(self, rawResp) -> string:
-        return ''
+    def __parse(self, rawResp) -> str:
+        pass
+
+    def __dns(self, host) -> str:
+        pass
 
