@@ -19,7 +19,6 @@ visited = []
 unvisited = []
 secretflag = []
 
-
 def collectSecretFlag(response):
     pattern = re.compile(r'<h2 class=\'secret_flag\' style=\"color:red\">FLAG: (\w+)</h2>')
     flag = pattern.findall(response)
