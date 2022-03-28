@@ -54,9 +54,9 @@ class Packet(NamedTuple):
 
     # offsets ...
 
-def wrap(data) -> bytes:
+def encode(packet) -> bytes:
     pass
     
-def parse(raw) -> Packet:
+def decode(raw) -> Packet:
     # handle incorrect checksum: raise exception?
     pass

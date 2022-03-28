@@ -1,17 +1,25 @@
 from ip import IpHandler
 from urllib.parse import urlparse
 from typing import NamedTuple
+import socket
+import random
 
 class TcpHandler(object):
     def __init__(self) -> None:
-        self.ipHanlder = IpHandler()
+        # self.ipHanlder = IpHandler()
         self.srcPort = self.__initPort()
+        self.seq = random.randint(0, 2**32)
 
         self.destIp = None
         self.destPort = None
 
+    # find an available port
     def __initPort(self) -> int:
-        pass
+        sock = socket.socket()
+        sock.bind(('', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        return port
 
     # establish a connection
     def connect(self, destIp, destPort) -> None:
@@ -19,7 +27,10 @@ class TcpHandler(object):
         self.destPort = destPort
 
         # handle three-way handshake
-        pass
+        Packet.sourcePort = self.srcPort
+        Packet.destinationPort = destPort
+        Packet.seuqenceNumber = self.seq
+
 
     def send(self, destIp, data) -> None:
         self.__send(destIp, data)
@@ -108,8 +119,8 @@ class Packet(NamedTuple):
     PADDING_OFFSET:             int = 32 * 5 + 24
     DATA_OFFSET:                int = 32 * 6
 
-def wrap(data) -> bytes:
+def encode(packet) -> bytes:
     pass
     
-def parse(raw) -> Packet:
+def decode(raw) -> Packet:
     pass
