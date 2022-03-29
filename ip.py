@@ -1,17 +1,6 @@
 from typing import NamedTuple
 import socket
 
-class IpHandler(object):
-    def __init__(self) -> None:
-        self.sender = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-        self.receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-
-    def send(self, destIp, data) -> None:
-        pass
-
-    def receive(self) -> bytes:
-        pass
-
 class Packet(NamedTuple):
     '''
     RFC 791: https://datatracker.ietf.org/doc/html/rfc791#section-3.1
@@ -60,3 +49,15 @@ def encode(packet) -> bytes:
 def decode(raw) -> Packet:
     # handle incorrect checksum: raise exception?
     pass
+
+class IpHandler(object):
+    def __init__(self) -> None:
+        self.sender = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+        self.receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+        self.srcIp = None # also needed when TCP wants to compute checksum
+
+    def send(self, destIp, data) -> None:
+        pass
+
+    def receive(self) -> Packet:
+        pass

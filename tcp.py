@@ -1,3 +1,6 @@
+from re import A
+from struct import pack
+from tkinter import Pack
 from ip import IpHandler
 from urllib.parse import urlparse
 from typing import NamedTuple
@@ -12,6 +15,7 @@ class TcpHandler(object):
 
         self.destIp = None
         self.destPort = None
+        self.ack = None
 
     # find an available port
     def __initPort(self) -> int:
@@ -26,11 +30,30 @@ class TcpHandler(object):
         self.destIp = destIp
         self.destPort = destPort
 
-        # handle three-way handshake
-        Packet.sourcePort = self.srcPort
-        Packet.destinationPort = destPort
-        Packet.seuqenceNumber = self.seq
+        # first handshake
+        first = Packet()
+        first.sourcePort = self.srcPort
+        first.destinationPort = destPort
+        first.sequenceNumber = self.seq
+        first.SYN = 1
+        first.window = 65535
+        self._send(encode(first), destIp, destPort)
 
+        # second handshake
+        second = decode(self._recv())
+        if second == None:
+            print("Invalid checksum!")
+        self.ack = second.sequenceNumber + 1
+        self.seq = second.acknowledgmentNumber
+
+        # thrid handshake
+        third = Packet()
+        third.sourcePort = self.srcPort
+        third.destinationPort = destPort
+        third.sequenceNumber = self.seq
+        third.ACK = 1
+        third.window = 65535
+        self.__send(encode(third), destIp, destPort)
 
     def send(self, destIp, data) -> None:
         self.__send(destIp, data)
@@ -46,7 +69,7 @@ class TcpHandler(object):
     def __recv(self) -> bytes:
         while True:
             data = self.ipHanlder.receive()
-            packet = parse(data)
+            packet = decode(data)
             if packet.destinationPort == self.srcPort:
                 return packet
         
@@ -83,7 +106,7 @@ class Packet(NamedTuple):
     # fields
     sourcePort:             int
     destinationPort:        int
-    seuqenceNumber:         int
+    sequenceNumber:         int
     acknowledgmentNumber:   int
     dataOffset:             int
     reserved:               int
