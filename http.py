@@ -3,6 +3,7 @@ from urllib.parse import urlparse
 
 HTTP_PORT = 80
 
+
 class HttpHandler(object):
     def __init__(self) -> None:
         self.tcpHandler = TcpHandler()
