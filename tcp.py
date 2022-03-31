@@ -3,12 +3,13 @@ import socket
 import random
 import struct
 from ipmock import IpHandler
-
+from iplayer import IPLayer
 
 class TcpHandler(object):
     def __init__(self) -> None:
-        # self.ipHanlder = IpHandler()
-        self.ipHandler = IpHandler()
+        # self.ipHandler = IpHandler()
+        # self.ipHandler = IpHandler()
+        self.ipHandler = IPLayer()
         self.srcPort = self.__initPort()
         self.seq = random.randint(0, 2**32)
 
@@ -22,7 +23,6 @@ class TcpHandler(object):
         sock.bind(('', 0))
         port = sock.getsockname()[1]
         sock.close()
-        print(port)
         return port
 
     # establish a connection
@@ -34,6 +34,7 @@ class TcpHandler(object):
         first = Packet(sourcePort=self.srcPort, destinationPort=destPort,
                        sequenceNumber=self.seq, syn=1, window=65535)
         self.__send(destIp, first)
+        print("first handshake done!")
 
         # second handshake
         second = self.recv()
@@ -41,21 +42,19 @@ class TcpHandler(object):
             print("Invalid checksum!")
         self.ack = second.sequenceNumber + 1
         self.seq = second.acknowledgmentNumber
+        print("second handshake done!")
 
-        # thrid handshake
-        third = Packet()
-        third.sourcePort = self.srcPort
-        third.destinationPort = destPort
-        third.sequenceNumber = self.seq
-        third.ack = 1
-        third.window = 65535
-        self.__send(encode(), destIp, destPort)
+        # third handshake
+        third = Packet(sourcePort=self.srcPort, destinationPort=destPort,
+                       sequenceNumber=self.seq, acknowledgmentNumber=self.ack, window=65535)
+        self.__send(destIp, third)
 
-    def send(self, dest_ip, data) -> None:
-        self.__send(dest_ip, data)
+    def send(self, dest_ip, packet) -> None:
+        self.__send(dest_ip, packet)
 
     # wrap one packet with TCP header and sent to IP layer
     def __send(self, dest_ip, packet) -> None:
+        print(len(encode(self.ipHandler.get_ip_address(), dest_ip, packet)))
         self.ipHandler.send(dest_ip, encode(self.ipHandler.get_ip_address(), dest_ip, packet))
 
     def recv(self):
@@ -65,6 +64,7 @@ class TcpHandler(object):
     def __recv(self) -> bytes:
         while True:
             data = self.ipHandler.recv()
+            print('receive {} data: {}'.format(len(data), bytes.fromhex(data).decode('utf-8')))
             packet = decode(data)
             if packet.destinationPort == self.srcPort:
                 return packet
@@ -119,26 +119,6 @@ class Packet(NamedTuple):
     options:                int     = 0
     data:                   bytes   = b''
 
-    # offsets in bits
-    SOURCE_PORT_OFFSET:         int = 0
-    DESTINATION_PORT_OFFSET:    int = 16
-    SEQUENCE_NUMBER_OFFSET:     int = 32 * 1
-    ACKNOWLEDGMENT_OFFSET:      int = 32 * 2
-    DATA_OFFSET:                int = 32 * 3
-    RESERVERD_OFFSET:           int = 32 * 3 + 4
-    URG_OFFSET:                 int = 32 * 3 + 10
-    ACK_OFFSET:                 int = 32 * 3 + 11
-    PSH_OFFSET:                 int = 32 * 3 + 12
-    RST_OFFSET:                 int = 32 * 3 + 13
-    SYN_OFFSET:                 int = 32 * 3 + 14
-    FIN_OFFSET:                 int = 32 * 3 + 15
-    WINDOW_OFFSET:              int = 32 * 3 + 16
-    CHECKSUM_OFFSET:            int = 32 * 4
-    URGENT_POINTER_OFFSET:      int = 32 * 4 + 16
-    OPTIONS_OFFSET:             int = 32 * 5
-    PADDING_OFFSET:             int = 32 * 5 + 24
-    DATA_OFFSET:                int = 32 * 6
-
 
 HEADER_PACK_FORMAT = '!HHLLBBHHH'
 
@@ -159,45 +139,49 @@ def encode(src_ip, dest_ip, packet) -> bytes:
     csum = checksum(pseudo_header + tcp_header + packet.data)
     tcp_header = tcp_header[:16] + csum + tcp_header[18:]
 
-    print(packet)
-    print(tcp_header)
+    # print(packet)
+    # print(tcp_header)
     return tcp_header + packet.data
 
 
 def decode(raw) -> Packet:
     # tcp header
-    packet = Packet()
-    packet.sourcePort, packet.destinationPort, \
-        packet.sequenceNumber, packet.acknowledgmentNumber, \
-        offset, flags, packet.window, packet.checksum, packet.urgentPointer = \
+    source_port, destination_port, \
+        sequence_number, acknowledgment_number, \
+        offset, flags, window, csum, urgent_pointer = \
         struct.unpack(HEADER_PACK_FORMAT, raw)
 
-    packet.dataOffset = offset >> 4
-    packet.fin = (flags >> 1) & 0x01
-    packet.syn = (flags >> 1) & 0x01
-    packet.pst = (flags >> 1) & 0x01
-    packet.psh = (flags >> 1) & 0x01
-    packet.ack = (flags >> 1) & 0x01
-    packet.urg = (flags >> 1) & 0x01
+    offset = (offset >> 4) * 4
+
+    fin = flags & 0x01
+    flags >>= 1
+    syn = flags & 0x01
+    flags >>= 1
+    rst = flags & 0x01
+    flags >>= 1
+    psh = flags & 0x01
+    flags >>= 1
+    ack = flags & 0x01
+    flags >>= 1
+    urg = flags & 0x01
 
     # verify checksum
-    # ...
+    csum = bytes()
 
-    packet.data = raw[packet.dataOffset:]
-    return packet
+    return Packet(source_port, destination_port, sequence_number, acknowledgment_number,
+                  offset, bytes(), urg, ack, psh, rst, syn, fin, window, csum, urgent_pointer, 0, raw[offset:])
 
 
 def checksum(data) -> bytes:
     s = 0
     for i in range(0, len(data), 2):
-        w = ord(data[i:i+1]) + (ord(data[i+1:i+2]) << 8)
-        s = s + w
+        s = s + ord(data[i:i+1]) + (ord(data[i+1:i+2]) << 8)
 
     s = (s >> 16) + (s & 0xffff)
     s = s + (s >> 16)
     s = ~s & 0xffff
     return s.to_bytes(2, 'big')
 
-
+# hex = bytes.fromhex("A2 C5 00 50 BD 23 1E 08 00 00 00 00 50 02 FF FF A6 88 00 00")
 handler = TcpHandler()
 handler.connect("204.44.192.60", 80)
