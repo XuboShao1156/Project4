@@ -1,79 +1,11 @@
-from typing import NamedTuple
+import time
 import socket
 import random
 import struct
+from typing import NamedTuple
+from multiprocessing import Process
 from ipmock import IpHandler
 from iplayer import IPLayer
-
-class TcpHandler(object):
-    def __init__(self) -> None:
-        # self.ipHandler = IpHandler()
-        # self.ipHandler = IpHandler()
-        self.ipHandler = IPLayer()
-        self.srcPort = self.__initPort()
-        self.seq = random.randint(0, 2**32)
-
-        self.destIp = None
-        self.destPort = None
-        self.ack = None
-
-    # find an available port
-    def __initPort(self) -> int:
-        sock = socket.socket()
-        sock.bind(('', 0))
-        port = sock.getsockname()[1]
-        sock.close()
-        return port
-
-    # establish a connection
-    def connect(self, destIp, destPort) -> None:
-        self.destIp = destIp
-        self.destPort = destPort
-
-        # first handshake
-        first = Packet(sourcePort=self.srcPort, destinationPort=destPort,
-                       sequenceNumber=self.seq, syn=1, window=65535)
-        self.__send(destIp, first)
-        print("first handshake done!")
-
-        # second handshake
-        second = self.recv()
-        if second is None:
-            print("Invalid checksum!")
-        self.ack = second.sequenceNumber + 1
-        self.seq = second.acknowledgmentNumber
-        print("second handshake done!")
-
-        # third handshake
-        third = Packet(sourcePort=self.srcPort, destinationPort=destPort,
-                       sequenceNumber=self.seq, acknowledgmentNumber=self.ack, window=65535)
-        self.__send(destIp, third)
-
-    def send(self, dest_ip, packet) -> None:
-        self.__send(dest_ip, packet)
-
-    # wrap one packet with TCP header and sent to IP layer
-    def __send(self, dest_ip, packet) -> None:
-        print(len(encode(self.ipHandler.get_ip_address(), dest_ip, packet)))
-        self.ipHandler.send(dest_ip, encode(self.ipHandler.get_ip_address(), dest_ip, packet))
-
-    def recv(self):
-        return decode(self.__recv())
-
-    # receive one packet from IP layer
-    def __recv(self) -> bytes:
-        while True:
-            data = self.ipHandler.recv()
-            print('receive {} data: {}'.format(len(data), bytes.fromhex(data).decode('utf-8')))
-            packet = decode(data)
-            if packet.destinationPort == self.srcPort:
-                return packet
-
-    # close connection
-    def close(self) -> None:
-        # handle four-way close
-        pass
-
 
 class Packet(NamedTuple):
     '''
@@ -103,33 +35,187 @@ class Packet(NamedTuple):
     # fields
     sourcePort:             int     = 0
     destinationPort:        int     = 0
-    sequenceNumber:         int     = 0
-    acknowledgmentNumber:   int     = 0
+    seqNum:                 int     = 0
+    ackNum:                 int     = 0
     dataOffset:             int     = 5
     reserved:               bytes   = 0
-    urg:                    int     = 0
-    ack:                    int     = 0
-    psh:                    int     = 0
-    rst:                    int     = 0
-    syn:                    int     = 0
-    fin:                    int     = 0
-    window:                 int     = 0
+    URG:                    int     = 0
+    ACK:                    int     = 0
+    PSH:                    int     = 0
+    RST:                    int     = 0
+    SYN:                    int     = 0
+    FIN:                    int     = 0
+    window:                 int     = 65535
     checksum:               bytes   = 0
     urgentPointer:          int     = 0
-    options:                int     = 0
+    options:                bytes   = b''
     data:                   bytes   = b''
 
 
-HEADER_PACK_FORMAT = '!HHLLBBHHH'
+class TcpHandler(object):
+    def __init__(self, retransmit_timeout=60) -> None:
+        # self.ipHandler = IpHandler()
+        # self.ipHandler = IpHandler()
+        self.ipHandler = IPLayer()
+
+        self.recv_buffer = []
+
+        self.retransmit_timeout = retransmit_timeout
+        self.cwin = 1
+
+        self.srcIp = IPLayer.fetch_ip()
+        self.srcPort = TcpHandler.fetch_port()
+        self.seqNum = random.randint(0, 2 ** 32)
+
+        self.destIp = None
+        self.destPort = None
+        self.ackNum = None
+
+    # fetch an available port from os
+    @staticmethod
+    def fetch_port() -> int:
+        sock = socket.socket()
+        sock.bind(('', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        return port
+
+    # establish a connection
+    def connect(self, destIp, destPort) -> None:
+        self.destIp = destIp
+        self.destPort = destPort
+
+        # first handshake
+        first = Packet(sourcePort=self.srcPort, destinationPort=destPort,
+                       seqNum=self.seqNum, SYN=1)
+        self.__send(encode(self.srcIp, self.destIp, first))
+
+        # second handshake
+        second = self.__recv()
+        if second is None:
+            print("Invalid checksum!")
+        self.seqNum = second.ackNum
+        self.ackNum = second.seqNum + 1
+
+        # third handshake
+        third = Packet(sourcePort=self.srcPort, destinationPort=destPort,
+                       seqNum=self.seqNum, ackNum=self.ackNum, ACK=1)
+        self.__send(encode(self.srcIp, self.destIp, third))
+
+        print("connection established!")
+
+    # send data and receive response
+    def send(self, data) -> None:
+        # send data
+        send_buffer = data
+        while len(send_buffer) != 0:
+            packet = Packet(sourcePort=self.srcPort, destinationPort=self.destPort,
+                            seqNum=self.seqNum, ackNum=self.ackNum, ACK=1, data=send_buffer[:self.cwin])
+            received = self.__send_and_wait(packet)
+            self.recv_buffer.append(received.data)
+
+            send_buffer = send_buffer[self.cwin:]
+            self.cwin += max(self.cwin + 1, 1000)
+
+        # receive data
+        finished = False
+        last_retry = None
+        while not finished:
+            received, retry = self.__recv_and_ack()
+            self.recv_buffer.append(received.data)
+
+            # stop retransmit of the last ack and update to this ack
+            if last_retry is not None:
+                last_retry.terminate()
+            last_retry = retry
+
+            finished = received.FIN
+
+        if last_retry is not None:
+            last_retry.terminate()
+
+    # send and wait for ack
+    def __send_and_wait(self, packet) -> Packet:
+        self.__send(encode(self.srcIp, self.destIp, packet))
+        # print(packet)
+
+        # start a process to retransmit packet
+        retry = Process(target=self.__retransmit, args=(packet,))
+        retry.start()
+
+        while True:
+            received = self.__recv()
+            if received.ackNum == packet.seqNum + len(packet.data) + packet.FIN:
+                retry.terminate()
+
+                self.seqNum = received.ackNum
+                self.ackNum = received.seqNum + len(received.data)
+
+                return received
+
+    # wait for a packet and ack
+    def __recv_and_ack(self) -> (Packet, Process):
+        while True:
+            received = self.__recv()
+            if received.seqNum == self.ackNum:
+                self.seqNum = received.ackNum
+                self.ackNum += len(received.data) + received.FIN
+
+                ack_pkt = Packet(sourcePort=self.srcPort, destinationPort=self.destPort,
+                                 seqNum=self.seqNum, ackNum=self.ackNum, ACK=1)
+                self.__send(encode(self.srcIp, self.destIp, ack_pkt))
+
+                # start a process to retransmit ack
+                retry = Process(target=self.__retransmit, args=(ack_pkt,))
+                retry.start()
+
+                return received, retry
+            elif received.seqNum < self.ackNum:
+                self.cwin = 1
+
+
+    # send packet after each retransmit timeout
+    def __retransmit(self, packet) -> None:
+        while True:
+            time.sleep(self.retransmit_timeout)
+
+            # TODO: test
+            print('retry...')
+            self.cwin = 1
+            packet.data = packet.data[:self.cwin]
+            self.__send(encode(self.srcIp, self.destIp, packet))
+
+    # send one packet to ip layer
+    def __send(self, encoded) -> None:
+        self.ipHandler.send(self.destIp, encoded)
+
+    # receive all data in buffer
+    def recvall(self) -> bytes:
+        data = b''.join(self.recv_buffer)
+        self.recv_buffer.clear()
+        return data
+
+    # receive one packet
+    def __recv(self) -> Packet:
+        while True:
+            packet = decode(self.ipHandler.recv(), self.srcIp, self.destIp)
+            if packet is not None and packet.destinationPort == self.srcPort:
+                return packet
+
+    # close connection
+    def close(self) -> None:
+        self.__send_and_wait(Packet(sourcePort=self.srcPort, destinationPort=self.destPort,
+                                    seqNum=self.seqNum, ackNum=self.ackNum, ACK=1, FIN=1))
+        print("connection closed!")
 
 
 def encode(src_ip, dest_ip, packet) -> bytes:
     # tcp header
     offset = packet.dataOffset << 4
-    flags = packet.fin + (packet.syn << 1) + (packet.rst << 2) + (packet.psh << 3) + (packet.ack << 4) + (packet.urg << 5)
-    tcp_header = struct.pack(HEADER_PACK_FORMAT, packet.sourcePort, packet.destinationPort,
-                             packet.sequenceNumber, packet.acknowledgmentNumber,
-                             offset, flags, packet.window, packet.checksum, packet.urgentPointer)
+    flags = packet.FIN + (packet.SYN << 1) + (packet.RST << 2) + (packet.PSH << 3) + (packet.ACK << 4) + (packet.URG << 5)
+    tcp_header = struct.pack('!HHLLBBHHH', packet.sourcePort, packet.destinationPort,
+                             packet.seqNum, packet.ackNum,
+                             offset, flags, packet.window, 0, packet.urgentPointer)
 
     # pseudo header
     pseudo_header = struct.pack('!4s4sBBH', socket.inet_aton(src_ip), socket.inet_aton(dest_ip),
@@ -137,19 +223,17 @@ def encode(src_ip, dest_ip, packet) -> bytes:
 
     # replace checksum
     csum = checksum(pseudo_header + tcp_header + packet.data)
-    tcp_header = tcp_header[:16] + csum + tcp_header[18:]
+    tcp_header = tcp_header[:16] + csum[1:2] + csum[0:1] + tcp_header[18:]
 
-    # print(packet)
-    # print(tcp_header)
     return tcp_header + packet.data
 
 
-def decode(raw) -> Packet:
+# decode the packet, if checksum is incorrect, return None
+def decode(raw, src_ip, dest_ip) -> Packet:
     # tcp header
     source_port, destination_port, \
         sequence_number, acknowledgment_number, \
-        offset, flags, window, csum, urgent_pointer = \
-        struct.unpack(HEADER_PACK_FORMAT, raw)
+        offset, flags, window, csum, urgent_pointer = struct.unpack('!HHLLBBHHH', raw[:20])
 
     offset = (offset >> 4) * 4
 
@@ -165,23 +249,57 @@ def decode(raw) -> Packet:
     flags >>= 1
     urg = flags & 0x01
 
+    # print(Packet(source_port, destination_port, sequence_number, acknowledgment_number,
+    #               offset, b'', urg, ack, psh, rst, syn, fin, window, csum, urgent_pointer, b'',
+    #               raw[offset:]))
+    print(str(sequence_number) + " " + str(acknowledgment_number))
+
     # verify checksum
-    csum = bytes()
+    pseudo_header = struct.pack('!4s4sBBH', socket.inet_aton(src_ip), socket.inet_aton(dest_ip), 0, 6, len(raw))
+    tcp_header_without_csum = raw[:16] + bytes(2) + raw[18:offset]
+    computed_csum = checksum(pseudo_header + tcp_header_without_csum + raw[offset:])
+    if computed_csum != csum.to_bytes(2, 'little'):
+        print('checksum not right: {} != {}'.format(hex(int.from_bytes(computed_csum, 'big')), hex(int.from_bytes(raw[16:18], 'little'))))
+        # return None
 
     return Packet(source_port, destination_port, sequence_number, acknowledgment_number,
-                  offset, bytes(), urg, ack, psh, rst, syn, fin, window, csum, urgent_pointer, 0, raw[offset:])
+                  offset, b'', urg, ack, psh, rst, syn, fin, window, csum, urgent_pointer, b'',
+                  raw[offset:])
 
 
 def checksum(data) -> bytes:
+    if len(data) % 2 != 0:
+        data += b'\0'
+
     s = 0
     for i in range(0, len(data), 2):
-        s = s + ord(data[i:i+1]) + (ord(data[i+1:i+2]) << 8)
+        s += ord(data[i:i+1]) + (ord(data[i+1:i+2]) << 8)
 
     s = (s >> 16) + (s & 0xffff)
     s = s + (s >> 16)
     s = ~s & 0xffff
+
+    print(s)
     return s.to_bytes(2, 'big')
 
-# hex = bytes.fromhex("A2 C5 00 50 BD 23 1E 08 00 00 00 00 50 02 FF FF A6 88 00 00")
-handler = TcpHandler()
-handler.connect("204.44.192.60", 80)
+
+# handler = TcpHandler()
+# handler.connect("204.44.192.60", 80)
+#
+# request = b"GET /index HTTP/1.0\r\nHost: david.choffnes.com\r\n\r\n"
+# handler.send(request)
+# handler.close()
+
+# pkt = Packet(1234, 4321, 10, 20, ACK=1, data=b'1234')
+# encoded = encode('1.2.3.4', '4.3.2.1', pkt)
+# decoded = decode(encoded, '1.2.3.4', '4.3.2.1')
+# print(decoded)
+
+# with open('out.txt') as f:
+#     content = ''.join(f.readlines())
+#     encoded = encode('204.44.192.60', '172.16.112.130', Packet(80, 37829, 281490170, 2965786257, 5, bytes(0), 0, 1, 0, 0, 0, 0,
+#                                                      64240, bytes(0), 0, data=content.encode()))
+#     decode(encoded, '172.16.112.130', '204.44.192.60')
+#
+#     # encode('172.16.112.130', '204.44.192.60', Packet(37829, 80, 2965786182, 281488722, 5, bytes(0), 0, 1, 0, 0, 0, 0,
+#     #                                                  65535, bytes(0), 0))

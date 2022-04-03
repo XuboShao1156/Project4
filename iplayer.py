@@ -1,6 +1,9 @@
 import socket
 from struct import *
 
+SRC_IP = '172.16.112.130'
+DEST_IP = '204.44.192.60'
+
 class IPLayer:
     rc = None
     ss = None
@@ -11,7 +14,7 @@ class IPLayer:
         self.rc = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
         self.ss = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
         self.ss.setsockopt(socket.IPPROTO_IP, socket.IP_HDRINCL, True)
-        self.src = IPLayer.get_ip_address()
+        self.src = IPLayer.fetch_ip()
 
     def send(self, dst, data):
         pkt = IPPacket()
@@ -23,15 +26,15 @@ class IPLayer:
 
     def recv(self):
         raw_data, addr = self.rc.recvfrom(65565)
-        print(addr)
-        print(len(raw_data))
+        # print(addr)
+        # print(len(raw_data))
         ippkt = IPPacket()
         ippkt.fromData(raw_data)
         return ippkt.Data
 
     @staticmethod
-    def get_ip_address():
-        return '172.16.112.129'
+    def fetch_ip():
+        return SRC_IP
 
 class IPPacket:
     #Packet Fields
@@ -45,8 +48,8 @@ class IPPacket:
     TTL = 255
     ULP = 6
     CheckSum = 0
-    SRC = socket.inet_aton("172.16.112.129")
-    Dest = socket.inet_aton("204.44.192.60")
+    SRC = socket.inet_aton(SRC_IP)
+    Dest = socket.inet_aton(DEST_IP)
     Opt = None
     Data = None
 
@@ -84,8 +87,8 @@ class IPPacket:
         self.CheckSum = chksum
         self.SRC = src
         self.Dest = dst
-        print(self)
         self.Data = data[20:]
+        # print("ip data len:" + str(len(self.Data)))
 
     def __str__(self):
         s = "\n"
