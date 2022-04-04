@@ -2,14 +2,17 @@
 import os
 
 files = {
-    'project4.php': 'https://david.choffnes.com/classes/cs4700sp22/project4.php',
-    'networkpapers.php': 'https://david.choffnes.com/classes/cs4700sp22/networkpapers.php',
-    '2MB.log': 'https://david.choffnes.com/classes/cs4700sp22/2MB.log',
-    '10MB.log': 'https://david.choffnes.com/classes/cs4700sp22/10MB.log',
-    '50MB.log': 'https://david.choffnes.com/classes/cs4700sp22/50MB.log',
+    'https://david.choffnes.com/': 'index.html',
+    'https://david.choffnes.com/classes/cs4700sp22/': 'index.html',
+    'https://david.choffnes.com/classes/cs4700sp22/project4.php': 'project4.php',
+    'https://david.choffnes.com/classes/cs4700sp22/networkpapers.php': 'networkpapers.php',
+
+    'https://david.choffnes.com/classes/cs4700sp22/2MB.log':'2MB.log',
+    'https://david.choffnes.com/classes/cs4700sp22/10MB.log': '10MB.log',
+    'https://david.choffnes.com/classes/cs4700sp22/50MB.log': '50MB.log'
 }
 
-for f, l in files.items():
+for l, f in files.items():
     print('testing {}...'.format(f))
 
     os.system('sudo python3 main.py {} > /dev/null'.format(l))
