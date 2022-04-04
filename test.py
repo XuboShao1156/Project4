@@ -3,6 +3,7 @@ import os
 
 files = {
     'project4.php': 'https://david.choffnes.com/classes/cs4700sp22/project4.php',
+    'networkpapers.php': 'https://david.choffnes.com/classes/cs4700sp22/networkpapers.php',
     '2MB.log': 'https://david.choffnes.com/classes/cs4700sp22/2MB.log',
     '10MB.log': 'https://david.choffnes.com/classes/cs4700sp22/10MB.log',
     '50MB.log': 'https://david.choffnes.com/classes/cs4700sp22/50MB.log',

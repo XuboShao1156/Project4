@@ -9,9 +9,15 @@ if __name__ == "__main__":
     
     url = sys.argv[1]
     urlobj = urlparse(sys.argv[1])
-    if urlobj.path == '' or url[-1] == '/':
+    if urlobj.path == '':
         url += '/index.html'
-    print(url)
+    if url[-1] == '/':
+        url += 'index.html'
+    # print(url)
 
-    with open(url.split('/')[-1], 'wb') as f:
-        f.write(HttpRequester().get(url))
+    code, content = HttpRequester().get(url)
+    if code == 200:
+        with open(url.split('/')[-1], 'wb') as f:
+            f.write(content)
+    else:
+        print('Error: response code {}!'.format(code))

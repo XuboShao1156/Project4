@@ -8,7 +8,7 @@ class HttpRequester(object):
     def __init__(self) -> None:
         self.tcpHandler = TcpHandler()
 
-    def get(self, url) -> bytes:
+    def get(self, url) -> (int, bytes):
         url_obj = urlparse(url)
 
         # dns query
@@ -25,20 +25,20 @@ class HttpRequester(object):
 
         # receive http response
         rawResp = self.tcpHandler.recvall()
+        self.tcpHandler.close()
 
         # parse response for content and return
         return self.__parse(rawResp)
 
     @staticmethod
-    def __parse(rawResp) -> bytes:
+    def __parse(rawResp) -> (int, bytes):
         offset = rawResp.find(b'\r\n\r\n')
         if offset != -1:
             offset += 4
         else:
             offset = rawResp.find('\n\n') + 2
 
-        print(rawResp[:offset], end='')
-        return rawResp[offset:]
+        return int(rawResp.split(b' ', 2)[1]), rawResp[offset:]
 
     @staticmethod
     def __dns(host) -> str:
