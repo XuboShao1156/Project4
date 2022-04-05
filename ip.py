@@ -69,7 +69,10 @@ class IpHandler(object):
     def fetch_ip():
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
+        local_ip = s.getsockname()[0]
+        s.close()
+
+        return local_ip
 
 
 class IPacket:
@@ -149,7 +152,23 @@ class IPacket:
         ip_head = raw[:self.ihl * 4]
 
         self.data = raw[self.ihl * 4:  self.totalLength]
-        if checksum(ip_head) != 0:
+
+        self.headerChecksum = 0
+        ip_header_noSum = struct.pack('!BBHHHBBH4s4s',
+                                      (self.version << 4) + self.ihl,
+                                      self.typeOfService,
+                                      self.totalLength,
+                                      self.identification,
+                                      (((self.flags_df << 1) + self.flags_mf << 13) +
+                                       self.fragmentOffset),
+                                      self.timeToLive,
+                                      self.Protocol,
+                                      self.headerChecksum,
+                                      socket.inet_aton(self.sourceAddress),
+                                      socket.inet_aton(self.destinationAddress)
+                                      )
+
+        if checksum(ip_head) != 0 and checksum(iphead) != checksum(ip_header_noSum):
             print("ip checksum is not correct")
 
         return self.data
