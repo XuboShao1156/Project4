@@ -45,7 +45,7 @@ class Packet(NamedTuple):
     RST:                    int     = 0
     SYN:                    int     = 0
     FIN:                    int     = 0
-    window:                 int     = 1000
+    window:                 int     = 1400
     checksum:               int     = 0
     urgentPointer:          int     = 0
     options:                bytes   = b''

@@ -31,7 +31,7 @@ class IpHandler(object):
         packet = IPacket()
 
         while True:
-            raw_data = self.receiver.recv(1500)
+            raw_data = self.receiver.recv(65535)
             if packet.decode(raw_data) == b'':
                 continue
             if packet.sourceAddress == self.dst and packet.destinationAddress == self.src:
