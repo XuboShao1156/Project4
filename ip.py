@@ -34,7 +34,8 @@ class IpHandler(object):
             raw_data = self.receiver.recv(65535)
             if packet.decode(raw_data) == b'':
                 continue
-            if packet.sourceAddress == self.dst and packet.destinationAddress == self.src:
+            if packet.sourceAddress == self.dst and packet.destinationAddress == self.src \
+                    and packet.Protocol == socket.IPPROTO_TCP:
                 return packet.data
 
     @staticmethod
@@ -114,13 +115,13 @@ class IPacket:
     def decode(self, raw) -> bytes:
         ver_inl, service, slen, id_header, offset, ttl, prot, csm, src, dst = struct.unpack('!BBHHHBBH4s4s', raw[:20])
 
-        self.version = (ver_inl & 0xf0) >> 4
+        self.version = ver_inl >> 4
         self.ihl = ver_inl & 0x0f
         self.typeOfService = service
         self.totalLength = slen
         self.identification = id_header
-        self.flags_df = (offset & 0x40) >> 14
-        self.flags_mf = (offset & 0x20) >> 13
+        self.flags_df = offset >> 14
+        self.flags_mf = offset >> 13
         self.fragmentOffset = offset & 0x1f
         self.timeToLive = ttl
         self.Protocol = prot
