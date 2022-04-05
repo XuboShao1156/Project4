@@ -2,9 +2,9 @@ import struct
 from typing import NamedTuple
 import socket
 
-from numpy.random import randint
+from helper import checksum
+import random
 
-from tcp import checksum
 
 
 class Packet(NamedTuple):
@@ -67,7 +67,7 @@ class IpHandler(object):
 
     @staticmethod
     def fetch_ip():
-        s = socket.socket(socket.AF_INET, socket.SOCK_RAW)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         return s.getsockname()[0]
 
@@ -106,8 +106,8 @@ class IPacket:
                                 self.timeToLive,
                                 self.Protocol,
                                 self.headerChecksum,
-                                self.sourceAddress,
-                                self.destinationAddress
+                                socket.inet_aton(self.sourceAddress),
+                                socket.inet_aton(self.destinationAddress)
                                 )
 
         self.headerChecksum = checksum(ip_header)
@@ -121,9 +121,9 @@ class IPacket:
                                 self.timeToLive,
                                 self.Protocol
                                 ) + struct.pack('H', self.headerChecksum) + \
-                    struct.pack('!4s4s', self.sourceAddress, self.destinationAddress)
+                    struct.pack('!4s4s', socket.inet_aton(self.sourceAddress), socket.inet_aton(self.destinationAddress))
 
-        packet = ip_header_checksum + self.data
+        packet = ip_header + self.data
         return packet
 
     def decode(self, raw) -> bytes:
