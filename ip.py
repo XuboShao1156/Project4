@@ -146,7 +146,7 @@ class IPacket:
                                        socket.inet_aton(self.destinationAddress))
 
         if checksum(ip_head) != 0 and checksum(ip_head) != checksum(ip_header_no_sum):
-            print('ip checksum incorrect')
+            print('Ip checksum incorrect! Ignore this packet!')
             return b''
 
         return self.data

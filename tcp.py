@@ -68,6 +68,7 @@ class TcpHandler(object):
 
         self.retransmit_timeout = retransmit_timeout
         self.cwin = 1
+        self.MSS = 1460
 
         self.recv_buffer = []
 
@@ -102,11 +103,11 @@ class TcpHandler(object):
         while len(send_buffer) != 0:
             received = self.__send_and_wait(Packet(sourcePort=self.srcPort, destinationPort=self.destPort,
                                                    seqNum=self.seqNum, ackNum=self.ackNum, ACK=1,
-                                                   data=send_buffer[:self.cwin]))
+                                                   data=send_buffer[:self.cwin * self.MSS]))
             self.recv_buffer.append(received.data)
 
-            send_buffer = send_buffer[self.cwin:]
-            self.cwin += max(self.cwin * 2, 1000)
+            send_buffer = send_buffer[self.cwin * self.MSS:]
+            self.cwin = max(self.cwin + 1, 1000)
 
         # receive data
         finished = False
@@ -251,9 +252,8 @@ def decode(raw, client_ip, server_ip) -> Packet:
     pseudo_header = struct.pack('!4s4sBBH', socket.inet_aton(server_ip), socket.inet_aton(client_ip), 0, 6, len(raw))
     tcp_header_without_csum = raw[:16] + bytes(2) + raw[18:offset]
     computed_csum = checksum(pseudo_header + tcp_header_without_csum + raw[offset:])
-    # print('computed: {}, packet {}'.format(computed_csum, raw[:20].hex()))
     if computed_csum != csum:
-        print("tcp checksum incorrect!")
+        print("TCP checksum incorrect! Ignore this packet!")
         return None
 
     return Packet(source_port, destination_port, sequence_number, acknowledgment_number,
