@@ -1,2 +1,6 @@
 *.pyc
 */venv/*
+*.html
+.idea/*
+*.php
+*.log

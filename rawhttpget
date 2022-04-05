@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+import sys
+import os
+
+
+def main():
+    if len(sys.argv) != 2:
+        print("Invalid input")
+        sys.exit(1)
+
+    print(os.popen("sudo python3 main.py " + sys.argv[1]).read())
+
+
+if __name__ == '__main__':
+    main()

@@ -4,10 +4,12 @@ from urllib.parse import urlparse
 HTTP_PORT = 80
 
 
+# A http request
 class HttpRequester(object):
     def __init__(self) -> None:
         self.tcpHandler = TcpHandler()
 
+    # send a GET request for the url
     def get(self, url) -> (int, bytes):
         url_obj = urlparse(url)
 
@@ -30,6 +32,7 @@ class HttpRequester(object):
         # parse response for content and return
         return self.__parse(rawResp)
 
+    # parse http for response code and body
     @staticmethod
     def __parse(rawResp) -> (int, bytes):
         offset = rawResp.find(b'\r\n\r\n')
@@ -40,6 +43,7 @@ class HttpRequester(object):
 
         return int(rawResp.split(b' ', 2)[1]), rawResp[offset:]
 
+    # dns query for the host
     @staticmethod
     def __dns(host) -> str:
         import socket
