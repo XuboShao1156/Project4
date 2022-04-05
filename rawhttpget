@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+import sys
+import os
+
+if len(sys.argv) != 2:
+    print("Invalid input")
+    sys.exit(1)
+
+os.system("sudo python3 main.py " + sys.argv[1])

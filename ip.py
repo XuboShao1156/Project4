@@ -31,7 +31,7 @@ class IpHandler(object):
         packet = IPacket()
 
         while True:
-            raw_data = self.receiver.recv(65535)
+            raw_data = self.receiver.recv(1500)
             if packet.decode(raw_data) == b'':
                 continue
             if packet.sourceAddress == self.dst and packet.destinationAddress == self.src:
@@ -146,6 +146,7 @@ class IPacket:
                                        socket.inet_aton(self.destinationAddress))
 
         if checksum(ip_head) != 0 and checksum(ip_head) != checksum(ip_header_no_sum):
+            print('ip checksum incorrect')
             return b''
 
         return self.data

@@ -45,7 +45,7 @@ class Packet(NamedTuple):
     RST:                    int     = 0
     SYN:                    int     = 0
     FIN:                    int     = 0
-    window:                 int     = 1400
+    window:                 int     = 1000
     checksum:               int     = 0
     urgentPointer:          int     = 0
     options:                bytes   = b''
@@ -54,7 +54,7 @@ class Packet(NamedTuple):
 
 # A handler for tcp protocol with basic congestion control to establish connection, send/recv data, and teardown.
 class TcpHandler(object):
-    def __init__(self, retransmit_timeout=60) -> None:
+    def __init__(self, retransmit_timeout=1) -> None:
         self.ipHandler = None   # initialized when connecting
 
         self.srcIp = IpHandler.fetch_ip()
@@ -253,8 +253,7 @@ def decode(raw, client_ip, server_ip) -> Packet:
     computed_csum = checksum(pseudo_header + tcp_header_without_csum + raw[offset:])
     # print('computed: {}, packet {}'.format(computed_csum, raw[:20].hex()))
     if computed_csum != csum:
-        # print("checksum incorrect! Psh: {}".format(psh))
-        # print()
+        print("tcp checksum incorrect!")
         return None
 
     return Packet(source_port, destination_port, sequence_number, acknowledgment_number,
