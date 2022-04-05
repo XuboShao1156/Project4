@@ -41,9 +41,17 @@ class IpHandler(object):
 
     def send(self, destIp, data) -> None:
         packet = IPacket()
-        packet.data = data
         packet.destinationAddress = destIp
 
+        while len(data) > 1480:
+            packet.data = data[:1480]
+            data = data[1480:]
+            packet.flags_df = 0
+            packet.flags_mf = 1
+            self.sender.send(IPacket.encode())
+
+        packet.flags_mf = 0
+        packet.data = data
         self.sender.send(IPacket.encode())
 
     def receive(self) -> bytes:
@@ -66,9 +74,11 @@ class IPacket:
     totalLength: int = 0
     identification: int = 0
     flags: int = 0
+    flags_df: int = 0
+    flags_mf: int = 0
     fragmentOffset: int = 0
     timeToLive: int = 255
-    Protocol: int = 6
+    Protocol: int = socket.IPPROTO_TCP
     headerChecksum: int = 0
     sourceAddress: str
     destinationAddress: str
@@ -97,18 +107,16 @@ class IPacket:
 
         self.headerChecksum = checksum(ip_header)
 
-        ip_header_checksum = struct.pack('!BBHHHBBH4s4s',
-                                         (self.version << 4) + self.ihl,
-                                         self.typeOfService,
-                                         self.totalLength,
-                                         self.identification,
-                                         self.fragmentOffset,
-                                         self.timeToLive,
-                                         self.Protocol,
-                                         self.headerChecksum,
-                                         self.sourceAddress,
-                                         self.destinationAddress
-                                         )
+        ip_header = struct.pack('!BBHHHBB',
+                                (self.version << 4) + self.ihl,
+                                self.typeOfService,
+                                self.totalLength,
+                                self.identification,
+                                self.fragmentOffset,
+                                self.timeToLive,
+                                self.Protocol
+                                ) + struct.pack('H', self.headerChecksum) + \
+                    struct.pack('!4s4s', self.sourceAddress, self.destinationAddress)
 
         packet = ip_header_checksum + self.data
         return packet
@@ -121,18 +129,19 @@ class IPacket:
         self.typeOfService = service
         self.totalLength = slen
         self.identification = id_header
-        self.flags = offset
-        self.fragmentOffset = offset
+        self.flags_df = (offset & 0x40) >> 14
+        self.flags_mf = (offset & 0x20) >> 13
+        self.fragmentOffset = offset & 0x1f
         self.timeToLive = ttl
         self.Protocol = prot
         self.headerChecksum = csm
-        self.sourceAddress = src
-        self.destinationAddress = dst
+        self.sourceAddress = socket.inet_ntoa(src)
+        self.destinationAddress = socket.inet_ntoa(dst)
 
         ip_head = raw[:self.ihl * 4]
 
         self.data = raw[self.ihl * 4:  self.totalLength]
         if checksum(ip_head) != 0:
-            print("checksum is not correct")
+            print("ip checksum is not correct")
 
         return self.data
