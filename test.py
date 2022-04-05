@@ -11,7 +11,7 @@ files = {
     'https://david.choffnes.com/classes/cs4700sp22/10MB.log': '10MB.log',
     'https://david.choffnes.com/classes/cs4700sp22/50MB.log': '50MB.log'
 }
-
+# for testing
 for l, f in files.items():
     print('testing {}...'.format(f))
 

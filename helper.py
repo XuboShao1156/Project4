@@ -1,4 +1,4 @@
-
+# checksum calculator
 def checksum(data) -> int:
     if len(data) % 2 != 0:
         data += b'\0'

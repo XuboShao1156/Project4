@@ -1,17 +1,19 @@
 import struct
 from random import randint
 import socket
-
 from helper import checksum
 
 
+# A handler for IP protocol with two raw scokets send/recv data.
 class IpHandler(object):
+    # initialize raw sockets and fetch local/remote IP address.
     def __init__(self, destIp) -> None:
         self.sender = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
         self.receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
         self.src = IpHandler.fetch_ip()
         self.dst = destIp
 
+    # sending packets including fragamentation.
     def send(self, destIp, destPort, data) -> None:
         packet = IPacket()
         packet.destinationAddress = destIp
@@ -27,6 +29,7 @@ class IpHandler(object):
         packet.data = data
         self.sender.sendto(packet.encode(), (destIp, destPort))
 
+    # receiving data.
     def recv(self) -> bytes:
         packet = IPacket()
 
@@ -38,6 +41,7 @@ class IpHandler(object):
                     and packet.Protocol == socket.IPPROTO_TCP:
                 return packet.data
 
+    # static method used to fecth local IP address
     @staticmethod
     def fetch_ip():
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -47,7 +51,7 @@ class IpHandler(object):
 
         return local_ip
 
-
+# For building IP headers.
 class IPacket:
     """
     RFC 791: https://datatracker.ietf.org/doc/html/rfc791#section-3.1
@@ -92,6 +96,7 @@ class IPacket:
     def __init__(self) -> None:
         self.sourceAddress = IpHandler.fetch_ip()
 
+    # Building IP headers and wrap it around the TCP header and data.
     def encode(self) -> bytes:
         self.identification = randint(0, 65535)
         self.totalLength = self.ihl * 4 + len(self.data)
@@ -112,6 +117,7 @@ class IPacket:
         self.headerChecksum = checksum(ip_header)
         return ip_header[:10] + struct.pack('H', self.headerChecksum) + ip_header[12:] + self.data
 
+    # Parsing  IP header of incoming packets to make sure it is a validated packet.
     def decode(self, raw) -> bytes:
         ver_inl, service, slen, id_header, offset, ttl, prot, csm, src, dst = struct.unpack('!BBHHHBBH4s4s', raw[:20])
 
@@ -130,10 +136,11 @@ class IPacket:
         self.destinationAddress = socket.inet_ntoa(dst)
 
         ip_head = raw[:self.ihl * 4]
-
+        # parse data.
         self.data = raw[self.ihl * 4:  self.totalLength]
 
         self.headerChecksum = 0
+        # remove checksum from header.
         ip_header_no_sum = struct.pack('!BBHHHBBH4s4s',
                                        (self.version << 4) + self.ihl,
                                        self.typeOfService,
@@ -146,6 +153,7 @@ class IPacket:
                                        socket.inet_aton(self.sourceAddress),
                                        socket.inet_aton(self.destinationAddress))
 
+        # checksum validation.
         if checksum(ip_head) != 0 and checksum(ip_head) != checksum(ip_header_no_sum):
             print('Ip checksum incorrect! Ignore this packet!')
             return b''

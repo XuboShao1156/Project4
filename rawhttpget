@@ -2,7 +2,7 @@
 import sys
 import os
 
-
+# main function
 def main():
     if len(sys.argv) != 2:
         print("Invalid arguments!")
