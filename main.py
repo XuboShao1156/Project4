@@ -2,7 +2,8 @@ import sys
 from http_req import HttpRequester
 from urllib.parse import urlparse
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     if len(sys.argv[1:]) != 1:
         print("Invalid command line args: one url is required.")
         exit(1)

@@ -104,7 +104,7 @@ class IPacket:
                                  self.fragmentOffset),
                                 self.timeToLive,
                                 self.Protocol,
-                                0,
+                                self.headerChecksum,
                                 socket.inet_aton(self.sourceAddress),
                                 socket.inet_aton(self.destinationAddress))
 
