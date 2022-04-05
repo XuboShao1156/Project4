@@ -54,7 +54,7 @@ class Packet(NamedTuple):
 
 # A handler for tcp protocol with basic congestion control to establish connection, send/recv data, and teardown.
 class TcpHandler(object):
-    def __init__(self, retransmit_timeout=1) -> None:
+    def __init__(self, retransmit_timeout=60) -> None:
         self.ipHandler = None   # initialized when connecting
 
         self.srcIp = IpHandler.fetch_ip()
@@ -68,7 +68,7 @@ class TcpHandler(object):
 
         self.retransmit_timeout = retransmit_timeout
         self.cwin = 1
-        self.MSS = 1460
+        self.MSS = 1400
 
         self.recv_buffer = []
 
@@ -170,8 +170,7 @@ class TcpHandler(object):
         while True:
             time.sleep(self.retransmit_timeout)
 
-            # TODO: test
-            # print('retry...')
+            # print('retransmit...')
             self.cwin = 1
             packet = Packet(packet.sourcePort, packet.destinationPort, packet.seqNum, packet.ackNum,
                             packet.dataOffset, packet.reserved,

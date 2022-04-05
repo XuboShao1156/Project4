@@ -1,13 +1,37 @@
 # Implementation
-## TCP Features
+## High Level Features (see `http_req.py`)
+Our HTTP requester is able to download the file specified by the url.
+Its `get` method accepts an url and returns the HTTP content and code.
+In the implementation, we first establish a TCP connect, then send a HTTP 1.0 GET request through the connection, finally wait to receive the whole HTTP response and close the connection.
+After receiving the response, we parse it for the response code and content/body, then return to the caller.
+In addition, it is also responsible to query the dns to convert the host into ip address.
+The caller is responsible to check the response code and take one of the actions:
+1. if the code is 200, store the content into a file, or
+2. print an error message reporting the code.
+
+## TCP Features (see `tcp.py`)
 1. Data integrity: checksum generation for outgoing packets and verification for incoming packets.
-2. Connection: three-way handshake to establish the connection and four-way wave to teardown the connection.
+2. Connection orientation: three-way handshake to establish the connection and four-way wave to teardown the connection.
 3. Reliable communication:
-    - Accept out-of-order incoming packets and guarantee the correct order to deliver,
+    - Accept out-of-order incoming packets and guarantee the correct order to deliver by utilizing sequence/ack number,
     - Identify and discard duplicate packets,
     - Retransmit packet after the timeout of 1 min.
-4. Congestion control: a basic congestion window which increases by the amount of successful acknowledged bytes and resets to 1 after timeout or packet drop
+4. Congestion control: a basic congestion window which increases by the amount of 1 MSS after a successful ACK or resets to 1 MSS after timeout or packet drop.
 
-## IP Features
+## IP Features (see `ip.py`)
+
 
 # Challenges
+## TCP
+1. encoding/decoding or calculate the checksum needs to be very careful to align the bytes and all other bitwise operations.
+2. timeout retransmission requires multi-thread programming which is hard to be correct and test.
+3. decouple the TCP continuous send/receive/ack process into discrete code logic like send-and-wait, recv-and-ack, and retransmit-after-timeout requires a great amount of refactoring.
+
+## IP
+
+
+# Test
+We wrote an automatic testing script (see `test.py`) to test if the file downloaded by our program is the same as that from wget.
+
+# Collaboration
+Kezhi Xiong implemented the HTTP requester and TCP protocol and Jiatian Wang implemented the IP protocol.
