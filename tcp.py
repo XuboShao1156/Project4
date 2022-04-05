@@ -5,6 +5,8 @@ import struct
 from typing import NamedTuple
 from multiprocessing import Process
 from ip import IpHandler
+from helper import checksum
+
 
 class Packet(NamedTuple):
     '''
@@ -31,7 +33,6 @@ class Packet(NamedTuple):
     |                             data                              |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     '''
-    # fields
     sourcePort:             int     = 0
     destinationPort:        int     = 0
     seqNum:                 int     = 0
@@ -51,26 +52,24 @@ class Packet(NamedTuple):
     data:                   bytes   = b''
 
 
+# A handler for tcp protocol with basic congestion control to establish connection, send/recv data, and teardown.
 class TcpHandler(object):
     def __init__(self, retransmit_timeout=60) -> None:
-        # self.ipHandler = IpHandler()
-        # self.ipHandler = IpHandler()
-        self.ipHandler = None
+        self.ipHandler = None   # initialized when connecting
 
-        self.recv_buffer = []
+        self.srcIp = IpHandler.fetch_ip()
+        self.srcPort = TcpHandler.fetch_port()
+
+        self.destIp = None
+        self.destPort = None
+
+        self.seqNum = random.randint(0, 2 ** 32)
+        self.ackNum = None
 
         self.retransmit_timeout = retransmit_timeout
         self.cwin = 1
 
-        self.srcIp = IpHandler.fetch_ip()
-        self.srcPort = TcpHandler.fetch_port()
-        self.seqNum = random.randint(0, 2 ** 32)
-
-        # print("port: " + str(self.srcPort))
-
-        self.destIp = None
-        self.destPort = None
-        self.ackNum = None
+        self.recv_buffer = []
 
     # fetch an available port from os
     @staticmethod
@@ -88,35 +87,26 @@ class TcpHandler(object):
         self.destIp = destIp
         self.destPort = destPort
 
-        # first handshake
-        first = Packet(sourcePort=self.srcPort, destinationPort=destPort,
-                       seqNum=self.seqNum, SYN=1)
-        self.__send(encode(self.srcIp, self.destIp, first))
-
-        # second handshake
-        second = self.__recv()
-        self.seqNum = second.ackNum
-        self.ackNum = second.seqNum + 1
+        # first handshake and second handshake
+        self.__send_and_wait(Packet(sourcePort=self.srcPort, destinationPort=destPort,
+                                    seqNum=self.seqNum, SYN=1))
 
         # third handshake
-        third = Packet(sourcePort=self.srcPort, destinationPort=destPort,
-                       seqNum=self.seqNum, ackNum=self.ackNum, ACK=1)
-        self.__send(encode(self.srcIp, self.destIp, third))
-
-        # print("connection established!")
+        self.__send(encode(self.srcIp, self.destIp, Packet(sourcePort=self.srcPort, destinationPort=destPort,
+                                                           seqNum=self.seqNum, ackNum=self.ackNum, ACK=1)))
 
     # send data and receive response
     def send(self, data) -> None:
         # send data
         send_buffer = data
         while len(send_buffer) != 0:
-            packet = Packet(sourcePort=self.srcPort, destinationPort=self.destPort,
-                            seqNum=self.seqNum, ackNum=self.ackNum, ACK=1, data=send_buffer[:self.cwin])
-            received = self.__send_and_wait(packet)
+            received = self.__send_and_wait(Packet(sourcePort=self.srcPort, destinationPort=self.destPort,
+                                                   seqNum=self.seqNum, ackNum=self.ackNum, ACK=1,
+                                                   data=send_buffer[:self.cwin]))
             self.recv_buffer.append(received.data)
 
             send_buffer = send_buffer[self.cwin:]
-            self.cwin += max(self.cwin + 1, 1000)
+            self.cwin += max(self.cwin * 2, 1000)
 
         # receive data
         finished = False
@@ -146,7 +136,7 @@ class TcpHandler(object):
 
         while True:
             received = self.__recv()
-            if received.ackNum == packet.seqNum + len(packet.data) + packet.FIN:
+            if received.ackNum == packet.seqNum + len(packet.data) + packet.SYN + packet.FIN:
                 retry.terminate()
 
                 self.seqNum = received.ackNum
@@ -209,7 +199,6 @@ class TcpHandler(object):
     def close(self) -> None:
         self.__send_and_wait(Packet(sourcePort=self.srcPort, destinationPort=self.destPort,
                                     seqNum=self.seqNum, ackNum=self.ackNum, ACK=1, FIN=1))
-        # print("connection closed!")
 
 
 def encode(src_ip, dest_ip, packet) -> bytes:
@@ -270,37 +259,3 @@ def decode(raw, client_ip, server_ip) -> Packet:
 
     return Packet(source_port, destination_port, sequence_number, acknowledgment_number,
                   offset, b'', urg, ack, psh, rst, syn, fin, window, csum, raw[18:20], b'', raw[offset:])
-
-
-def checksum(data) -> int:
-    if len(data) % 2 != 0:
-        data += b'\0'
-
-    s = 0
-    for i in range(0, len(data), 2):
-        s += ord(data[i:i+1]) + (ord(data[i+1:i+2]) << 8)
-
-    s = (s >> 16) + (s & 0xffff)
-    s = s + (s >> 16)
-    return ~s & 0xffff
-
-# handler = TcpHandler()
-# handler.connect("204.44.192.60", 80)
-#
-# request = b"GET /index HTTP/1.0\r\nHost: david.choffnes.com\r\n\r\n"
-# handler.send(request)
-# handler.close()
-
-# pkt = Packet(1234, 4321, 10, 20, ACK=1, data=b'1234')
-# encoded = encode('1.2.3.4', '4.3.2.1', pkt)
-# decoded = decode(encoded, '1.2.3.4', '4.3.2.1')
-# print(decoded)
-
-# with open('out.txt') as f:
-#     content = ''.join(f.readlines())
-#     encoded = encode('204.44.192.60', '172.16.112.130', Packet(80, 37829, 281490170, 2965786257, 5, bytes(0), 0, 1, 0, 0, 0, 0,
-#                                                      64240, bytes(0), 0, data=content.encode()))
-#     decode(encoded, '172.16.112.130', '204.44.192.60')
-#
-#     # encode('172.16.112.130', '204.44.192.60', Packet(37829, 80, 2965786182, 281488722, 5, bytes(0), 0, 1, 0, 0, 0, 0,
-#     #                                                  65535, bytes(0), 0))
