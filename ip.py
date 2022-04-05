@@ -1,39 +1,11 @@
 import struct
 from random import randint
-from typing import NamedTuple
 import socket
 
 from helper import checksum
 
 
-class Packet(NamedTuple):
-    '''
-    RFC 791: https://datatracker.ietf.org/doc/html/rfc791#section-3.1
-
-    IP Header Format:
-     0                   1                   2                   3
-     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |Version|  IHL  |Type of Service|          Total Length         |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |         Identification        |Flags|      Fragment Offset    |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |  Time to Live |    Protocol   |         Header Checksum       |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                       Source Address                          |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                    Destination Address                        |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                    Options                    |    Padding    |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |                           data                                |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    '''
-
-
 class IpHandler(object):
-
     def __init__(self, destIp) -> None:
         self.sender = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
         self.receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
@@ -60,8 +32,8 @@ class IpHandler(object):
 
         while True:
             raw_data = self.receiver.recv(65535)
-            packet.decode(raw_data)
-            ip_header_raw = raw_data[:20]
+            if packet.decode(raw_data) == b'':
+                continue
             if packet.sourceAddress == self.dst and packet.destinationAddress == self.src:
                 return packet.data
 
@@ -76,6 +48,29 @@ class IpHandler(object):
 
 
 class IPacket:
+    """
+    RFC 791: https://datatracker.ietf.org/doc/html/rfc791#section-3.1
+
+    IP Header Format:
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |Version|  IHL  |Type of Service|          Total Length         |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |         Identification        |Flags|      Fragment Offset    |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |  Time to Live |    Protocol   |         Header Checksum       |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                       Source Address                          |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                    Destination Address                        |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                    Options                    |    Padding    |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                           data                                |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    """
     version: int = 4
     ihl: int = 5
     typeOfService: int = 0
@@ -109,28 +104,12 @@ class IPacket:
                                  self.fragmentOffset),
                                 self.timeToLive,
                                 self.Protocol,
-                                self.headerChecksum,
+                                0,
                                 socket.inet_aton(self.sourceAddress),
-                                socket.inet_aton(self.destinationAddress)
-                                )
-
-        self.headerChecksum = checksum(ip_header)
-
-        ip_header = struct.pack('!BBHHHBB',
-                                (self.version << 4) + self.ihl,
-                                self.typeOfService,
-                                self.totalLength,
-                                self.identification,
-                                (((self.flags_df << 1) + self.flags_mf << 13) +
-                                 self.fragmentOffset),
-                                self.timeToLive,
-                                self.Protocol
-                                ) + struct.pack('H', self.headerChecksum) + \
-                    struct.pack('!4s4s', socket.inet_aton(self.sourceAddress),
                                 socket.inet_aton(self.destinationAddress))
 
-        packet = ip_header + self.data
-        return packet
+        self.headerChecksum = checksum(ip_header)
+        return ip_header[:10] + struct.pack('H', self.headerChecksum) + ip_header[12:] + self.data
 
     def decode(self, raw) -> bytes:
         ver_inl, service, slen, id_header, offset, ttl, prot, csm, src, dst = struct.unpack('!BBHHHBBH4s4s', raw[:20])
@@ -154,21 +133,19 @@ class IPacket:
         self.data = raw[self.ihl * 4:  self.totalLength]
 
         self.headerChecksum = 0
-        ip_header_noSum = struct.pack('!BBHHHBBH4s4s',
-                                      (self.version << 4) + self.ihl,
-                                      self.typeOfService,
-                                      self.totalLength,
-                                      self.identification,
-                                      (((self.flags_df << 1) + self.flags_mf << 13) +
-                                       self.fragmentOffset),
-                                      self.timeToLive,
-                                      self.Protocol,
-                                      self.headerChecksum,
-                                      socket.inet_aton(self.sourceAddress),
-                                      socket.inet_aton(self.destinationAddress)
-                                      )
+        ip_header_no_sum = struct.pack('!BBHHHBBH4s4s',
+                                       (self.version << 4) + self.ihl,
+                                       self.typeOfService,
+                                       self.totalLength,
+                                       self.identification,
+                                       (((self.flags_df << 1) + self.flags_mf << 13) + self.fragmentOffset),
+                                       self.timeToLive,
+                                       self.Protocol,
+                                       self.headerChecksum,
+                                       socket.inet_aton(self.sourceAddress),
+                                       socket.inet_aton(self.destinationAddress))
 
-        if checksum(ip_head) != 0 and checksum(iphead) != checksum(ip_header_noSum):
-            print("ip checksum is not correct")
+        if checksum(ip_head) != 0 and checksum(ip_head) != checksum(ip_header_no_sum):
+            return b''
 
         return self.data
