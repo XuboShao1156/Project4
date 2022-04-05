@@ -35,9 +35,11 @@ class Packet(NamedTuple):
 
 class IpHandler(object):
 
-    def __init__(self) -> None:
+    def __init__(self, destIp) -> None:
         self.sender = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
         self.receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+        self.src = IpHandler.fetch_ip()
+        self.dst = destIp
 
     def send(self, destIp, data) -> None:
         packet = IPacket()
@@ -48,17 +50,20 @@ class IpHandler(object):
             data = data[1480:]
             packet.flags_df = 0
             packet.flags_mf = 1
-            self.sender.send(IPacket.encode())
+            self.sender.send(packet.encode())
 
         packet.flags_mf = 0
         packet.data = data
-        self.sender.send(IPacket.encode())
+        self.sender.send(packet.encode())
 
     def receive(self) -> bytes:
         packet = IPacket()
 
         raw_data = self.receiver.recv(65535)
-        return packet.decode(raw_data)
+        packet.decode(raw_data)
+
+        if packet.sourceAddress == self.dst and packet.destinationAddress == self.src:
+            return packet.data
 
     @staticmethod
     def fetch_ip():
