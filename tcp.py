@@ -1,11 +1,10 @@
-import array
 import time
 import socket
 import random
 import struct
 from typing import NamedTuple
 from multiprocessing import Process
-from iplayer import IPLayer
+from ip import IpHandler
 
 class Packet(NamedTuple):
     '''
@@ -56,14 +55,14 @@ class TcpHandler(object):
     def __init__(self, retransmit_timeout=60) -> None:
         # self.ipHandler = IpHandler()
         # self.ipHandler = IpHandler()
-        self.ipHandler = IPLayer()
+        self.ipHandler = None
 
         self.recv_buffer = []
 
         self.retransmit_timeout = retransmit_timeout
         self.cwin = 1
 
-        self.srcIp = IPLayer.fetch_ip()
+        self.srcIp = IpHandler.fetch_ip()
         self.srcPort = TcpHandler.fetch_port()
         self.seqNum = random.randint(0, 2 ** 32)
 
@@ -84,6 +83,8 @@ class TcpHandler(object):
 
     # establish a connection
     def connect(self, destIp, destPort) -> None:
+        self.ipHandler = IpHandler(destIp)
+
         self.destIp = destIp
         self.destPort = destPort
 
@@ -189,7 +190,7 @@ class TcpHandler(object):
 
     # send one packet to ip layer
     def __send(self, encoded) -> None:
-        self.ipHandler.send(self.destIp, encoded)
+        self.ipHandler.send(self.destIp, self.destPort, encoded)
 
     # receive all data in buffer
     def recvall(self) -> bytes:

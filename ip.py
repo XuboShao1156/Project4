@@ -1,9 +1,9 @@
 import struct
+from random import randint
 from typing import NamedTuple
 import socket
 
 from helper import checksum
-import random
 
 
 class Packet(NamedTuple):
@@ -40,7 +40,7 @@ class IpHandler(object):
         self.src = IpHandler.fetch_ip()
         self.dst = destIp
 
-    def send(self, destIp, data) -> None:
+    def send(self, destIp, destPort, data) -> None:
         packet = IPacket()
         packet.destinationAddress = destIp
 
@@ -49,13 +49,13 @@ class IpHandler(object):
             data = data[1480:]
             packet.flags_df = 0
             packet.flags_mf = 1
-            self.sender.send(packet.encode())
+            self.sender.sendto(packet.encode(), (destIp, destPort))
 
         packet.flags_mf = 0
         packet.data = data
-        self.sender.send(packet.encode())
+        self.sender.sendto(packet.encode(), (destIp, destPort))
 
-    def receive(self) -> bytes:
+    def recv(self) -> bytes:
         packet = IPacket()
 
         while True:
