@@ -6,7 +6,6 @@ from helper import checksum
 import random
 
 
-
 class Packet(NamedTuple):
     '''
     RFC 791: https://datatracker.ietf.org/doc/html/rfc791#section-3.1
@@ -59,11 +58,12 @@ class IpHandler(object):
     def receive(self) -> bytes:
         packet = IPacket()
 
-        raw_data = self.receiver.recv(65535)
-        packet.decode(raw_data)
-
-        if packet.sourceAddress == self.dst and packet.destinationAddress == self.src:
-            return packet.data
+        while True:
+            raw_data = self.receiver.recv(65535)
+            packet.decode(raw_data)
+            ip_header_raw = raw_data[:20]
+            if packet.sourceAddress == self.dst and packet.destinationAddress == self.src:
+                return packet.data
 
     @staticmethod
     def fetch_ip():
@@ -102,7 +102,8 @@ class IPacket:
                                 self.typeOfService,
                                 self.totalLength,
                                 self.identification,
-                                self.fragmentOffset,
+                                (((self.flags_df << 1) + self.flags_mf << 13) +
+                                 self.fragmentOffset),
                                 self.timeToLive,
                                 self.Protocol,
                                 self.headerChecksum,
@@ -117,11 +118,13 @@ class IPacket:
                                 self.typeOfService,
                                 self.totalLength,
                                 self.identification,
-                                self.fragmentOffset,
+                                (((self.flags_df << 1) + self.flags_mf << 13) +
+                                 self.fragmentOffset),
                                 self.timeToLive,
                                 self.Protocol
                                 ) + struct.pack('H', self.headerChecksum) + \
-                    struct.pack('!4s4s', socket.inet_aton(self.sourceAddress), socket.inet_aton(self.destinationAddress))
+                    struct.pack('!4s4s', socket.inet_aton(self.sourceAddress),
+                                socket.inet_aton(self.destinationAddress))
 
         packet = ip_header + self.data
         return packet
