@@ -19,6 +19,10 @@ The caller is responsible to check the response code and take one of the actions
 4. Congestion control: a basic congestion window which increases by the amount of 1 MSS after a successful ACK or resets to 1 MSS after timeout or packet drop.
 
 ## IP Features (see `ip.py`)
+1. Setting IP packets Header: For outgoing packets, set the correct IP header, wrapping it with payload
+   including TCP header and data. For incoming packets, validating the checksums of incoming packets.
+2. Fetch the ip address for both local machine and remote servers.
+3. Checking the IP address checksum and protocol  Identification of the incoming packets to accept validated packets.
 
 
 # Challenges
@@ -28,7 +32,8 @@ The caller is responsible to check the response code and take one of the actions
 3. decouple the TCP continuous send/receive/ack process into discrete code logic like send-and-wait, recv-and-ack, and retransmit-after-timeout requires a great amount of refactoring.
 
 ## IP
-
+1. Dealing with fragmentation takes effort.
+2. Encoding/decoding the IP header take some time to read the documentations.
 
 # Test
 We wrote an automatic testing script (see `test.py`) to test if the file downloaded by our program is the same as that from wget.
