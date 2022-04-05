@@ -7,9 +7,11 @@ if __name__ == "__main__":
         print("Invalid command line args: one url is required.")
         exit(1)
 
+    # send http request
     url = sys.argv[1]
     code, content = HttpRequester().get(url)
 
+    # success?
     if code == 200:
         urlobj = urlparse(sys.argv[1])
 
@@ -18,8 +20,8 @@ if __name__ == "__main__":
             fn = 'index.html'
         if url[-1] == '/':
             fn = 'index.html'
-        print(fn)
 
+        # write file
         with open(fn, 'wb') as f:
             f.write(content)
     else:
