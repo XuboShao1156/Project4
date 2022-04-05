@@ -4,8 +4,7 @@ import socket
 
 from numpy.random import randint
 
-
-# from tcp import checksum
+from tcp import checksum
 
 
 class Packet(NamedTuple):
@@ -35,6 +34,32 @@ class Packet(NamedTuple):
 
 
 class IpHandler(object):
+
+    def __init__(self) -> None:
+        self.sender = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+        self.receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+
+    def send(self, destIp, data) -> None:
+        packet = IPacket()
+        packet.data = data
+        packet.destinationAddress = destIp
+
+        self.sender.send(IPacket.encode())
+
+    def receive(self) -> bytes:
+        packet = IPacket()
+
+        raw_data = self.receiver.recv(65535)
+        return packet.decode(raw_data)
+
+    @staticmethod
+    def fetch_ip():
+        s = socket.socket(socket.AF_INET, socket.SOCK_RAW)
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+
+
+class IPacket:
     version: int = 4
     ihl: int = 5
     typeOfService: int = 0
@@ -51,10 +76,6 @@ class IpHandler(object):
     data: bytes = None
 
     def __init__(self) -> None:
-        self.sender = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-        self.receiver = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-        self.srcIp = None # also needed when TCP wants to compute checksum
-
         self.sourceAddress = IpHandler.fetch_ip()
 
     def encode(self) -> bytes:
@@ -74,7 +95,7 @@ class IpHandler(object):
                                 self.destinationAddress
                                 )
 
-        # self.headerChecksum = checksum(ip_header)
+        self.headerChecksum = checksum(ip_header)
 
         ip_header_checksum = struct.pack('!BBHHHBBH4s4s',
                                          (self.version << 4) + self.ihl,
@@ -93,8 +114,6 @@ class IpHandler(object):
         return packet
 
     def decode(self, raw) -> bytes:
-        # handle incorrect checksum: raise exception?
-
         ver_inl, service, slen, id_header, offset, ttl, prot, csm, src, dst = struct.unpack('!BBHHHBBH4s4s', raw[:20])
 
         self.version = (ver_inl & 0xf0) >> 4
@@ -113,22 +132,7 @@ class IpHandler(object):
         ip_head = raw[:self.ihl * 4]
 
         self.data = raw[self.ihl * 4:  self.totalLength]
-        # if checksum(ip_head)  != 0 :
-        #   print("checksum is not correct")
+        if checksum(ip_head) != 0:
+            print("checksum is not correct")
 
         return self.data
-
-    def send(self, destIp, data) -> None:
-        self.data = data
-        self.destinationAddress = destIp
-        self.sender.send(IpHandler().encode())
-
-    def receive(self) -> bytes:
-        raw_data = self.receiver.recv(65535)
-        return self.decode(raw_data)
-
-    @staticmethod
-    def fetch_ip():
-        s = socket.socket(socket.AF_INET, socket.SOCK_RAW)
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
